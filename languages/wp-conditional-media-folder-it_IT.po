@@ -1,0 +1,90 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: WP Conditional Media Folder 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2023-11-30 12:00+0000\n"
+"PO-Revision-Date: 2023-11-30 12:00+0100\n"
+"Last-Translator: Andrea Barbagallo (BotheorY) info@andreabarbagallo.com\n"
+"Language-Team: Italian\n"
+"Language: it_IT\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.8\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: includes/class-wcmf-settings.php:20
+msgid "Conditional Media Folder"
+msgstr "Conditional Media Folder"
+
+#: includes/class-wcmf-settings.php:100
+msgid "WP Conditional Media Folder Settings"
+msgstr "Impostazioni WP Conditional Media Folder"
+
+#: includes/class-wcmf-settings.php:109
+msgid "Custom Folder Path (Absolute)"
+msgstr "Percorso Cartella Personalizzata (Assoluto)"
+
+#: includes/class-wcmf-settings.php:113
+msgid "Enter the absolute server path. Ensure this directory is writable by the web server."
+msgstr "Inserisci il percorso assoluto sul server. Assicurati che questa directory sia scrivibile dal web server."
+
+#: includes/class-wcmf-settings.php:120
+msgid "Custom Folder URL"
+msgstr "URL Cartella Personalizzata"
+
+#: includes/class-wcmf-settings.php:124
+msgid "The full URL to access files in the folder above."
+msgstr "L'URL completo per accedere ai file nella cartella sopra indicata."
+
+#: includes/class-wcmf-settings.php:131
+msgid "Detection Criteria"
+msgstr "Criteri di Rilevamento"
+
+#: includes/class-wcmf-settings.php:132
+msgid "Files matching ANY of the following criteria sets will be saved to the custom folder."
+msgstr "I file che corrispondono a UNO QUALSIASI dei seguenti set di criteri verranno salvati nella cartella personalizzata."
+
+#: includes/class-wcmf-settings.php:148
+msgid "Add New Criteria Set"
+msgstr "Aggiungi Nuovo Set di Criteri"
+
+#: includes/class-wcmf-settings.php:164
+msgid "Criteria Set"
+msgstr "Set di Criteri"
+
+#: includes/class-wcmf-settings.php:165
+msgid "Remove"
+msgstr "Rimuovi"
+
+#: includes/class-wcmf-settings.php:169
+msgid "Starts With"
+msgstr "Inizia con"
+
+#: includes/class-wcmf-settings.php:173
+msgid "Ends With"
+msgstr "Finisce con"
+
+#: includes/class-wcmf-settings.php:177
+msgid "Contains"
+msgstr "Contiene"
+
+#: includes/class-wcmf-settings.php:181
+msgid "Min Length"
+msgstr "Lunghezza Minima"
+
+#: includes/class-wcmf-settings.php:185
+msgid "Max Length"
+msgstr "Lunghezza Massima"
+
+#: includes/class-wcmf-settings.php:189
+msgid "MIME Type"
+msgstr "Tipo MIME"
+
+#: includes/class-wcmf-settings.php:90
+msgid "Are you sure you want to remove this criteria set?"
+msgstr "Sei sicuro di voler rimuovere questo set di criteri?"
+
+#: includes/class-wcmf-settings.php:64
+msgid "Security Warning: You cannot use a core WordPress directory as a custom upload folder."
+msgstr "Avviso di sicurezza: Non puoi utilizzare una directory principale di WordPress come cartella di upload personalizzata."
