@@ -71,7 +71,7 @@ class WCMF_Core {
 	private function wcmf_substr( $str, $start, $length = null ) {
 		if ( function_exists( 'mb_substr' ) ) {
 			return ( null === $length )
-				? mb_substr( (string) $str, (int) $start, null, 'UTF-8' )
+				? mb_substr( (string) $str, (int) $start )
 				: mb_substr( (string) $str, (int) $start, (int) $length, 'UTF-8' );
 		}
 		return ( null === $length )
@@ -166,7 +166,7 @@ class WCMF_Core {
 		$type_reported = isset( $file['type'] ) ? (string) $file['type'] : '';
 		$type          = '';
 
-		$tmp_name = ( ! empty( $file['tmp_name'] ) && @file_exists( $file['tmp_name'] ) ) ? (string) $file['tmp_name'] : '';
+        $tmp_name = ( ! empty( $file['tmp_name'] ) && is_uploaded_file( $file['tmp_name'] ) && file_exists( $file['tmp_name'] ) ) ? (string) $file['tmp_name'] : '';
 
 		if ( '' !== $tmp_name ) {
 			// Prefer WP-native detection when available.
@@ -210,6 +210,20 @@ class WCMF_Core {
 	 */
 	private function evaluate_rule( $rule, $filename, $mime ) {
 		if ( ! is_array( $rule ) ) {
+			return false;
+		}
+
+		$has_string_condition = (
+			! empty( $rule['starts_with'] ) ||
+			! empty( $rule['ends_with'] ) ||
+			! empty( $rule['contains'] ) ||
+			! empty( $rule['mime_type'] )
+		);
+		$has_length_condition = (
+			( isset( $rule['min_len'] ) && '' !== $rule['min_len'] ) ||
+			( isset( $rule['max_len'] ) && '' !== $rule['max_len'] )
+		);
+		if ( ! $has_string_condition && ! $has_length_condition ) {
 			return false;
 		}
 
@@ -258,14 +272,23 @@ class WCMF_Core {
 			}
 		}
 
-		// 6. Mime Type (partial match allowed, e.g. "image/" matches "image/jpeg")
+		// 6. Mime Type
 		if ( ! empty( $rule['mime_type'] ) ) {
 			if ( empty( $mime_lower ) ) {
 				return false; // Cannot match MIME rule if type is unknown
 			}
 			$search = $this->wcmf_str_lower( $rule['mime_type'] );
-			if ( '' !== $search && false === $this->wcmf_str_pos( $mime_lower, $search ) ) {
-				return false;
+			if ( '' !== $search ) {
+				$last_char = $this->wcmf_substr( $search, -1 );
+				if ( '/' === $last_char ) {
+					if ( 0 !== $this->wcmf_str_pos( $mime_lower, $search ) ) {
+						return false;
+					}
+				} else {
+					if ( $mime_lower !== $search ) {
+						return false;
+					}
+				}
 			}
 		}
 
@@ -288,8 +311,15 @@ class WCMF_Core {
 			return $uploads;
 		}
 		
-		$custom_path = untrailingslashit( wp_normalize_path( $custom_path_raw ) );
-		$custom_url = untrailingslashit( esc_url_raw( $custom_url_raw ) );
+        $custom_path = untrailingslashit( wp_normalize_path( $custom_path_raw ) );
+        $custom_url = untrailingslashit( esc_url_raw( $custom_url_raw ) );
+
+        // Ensure a valid web scheme for the custom URL
+        $scheme = function_exists( 'wp_parse_url' ) ? wp_parse_url( $custom_url, PHP_URL_SCHEME ) : parse_url( $custom_url, PHP_URL_SCHEME );
+        if ( ! in_array( strtolower( (string) $scheme ), [ 'http', 'https' ], true ) ) {
+            $this->is_current_upload_custom = false;
+            return $uploads;
+        }
 
 		if (
 			$custom_path === '' ||
@@ -317,11 +347,14 @@ class WCMF_Core {
 		// Preserve subdir (Year/Month) structure to keep folder organized
 		$base  = untrailingslashit( $custom_path );
 		
-		$subdir = isset( $uploads['subdir'] ) ? wp_normalize_path((string)$uploads['subdir']) : '';
-		if ($subdir !== '' && ($this->wcmf_is_stream($subdir) || $this->is_traversal_path($subdir))) {
+		$subdir = isset( $uploads['subdir'] ) ? wp_normalize_path( (string) $uploads['subdir'] ) : '';
+		if ( $subdir !== '' && ( $this->wcmf_is_stream( $subdir ) || $this->is_traversal_path( $subdir ) ) ) {
 			$subdir = '';
-		}		
-				
+		}
+		if ( $subdir !== '' ) {
+			$subdir = '/' . ltrim( $subdir, '/' );
+		}
+		
 		$target_dir = $base . $subdir;
 
 		// Attempt creation if missing (including subdir)
@@ -334,7 +367,10 @@ class WCMF_Core {
 			}
 			// Prevent directory listing if the server allows it.
 			if ( ! file_exists( $target_dir . '/index.php' ) ) {
-				@file_put_contents( $target_dir . '/index.php', '<?php // Silence is golden.' );
+				$written = file_put_contents( $target_dir . '/index.php', '<?php // Silence is golden.' );
+				if ( false === $written && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					error_log( 'WCMF Warning: Failed to write index.php into ' . $target_dir . '.' );
+				}
 			}
 		}
 		
@@ -349,6 +385,7 @@ class WCMF_Core {
 
 		$uploads['basedir'] = $base;
 		$uploads['path']    = $target_dir;
+		$uploads['subdir']  = $subdir;
 
 		if ( ! empty( $custom_url_raw ) ) {
 			$uploads['baseurl'] = $custom_url;
@@ -362,6 +399,7 @@ class WCMF_Core {
 	 * Step 3: Flag the attachment in DB so we know it's in a custom folder later.
 	 */
 	public function mark_attachment_as_custom( $post_id ) {
+		$post_id = (int) $post_id;
 		if ( $this->is_current_upload_custom ) {
 			update_post_meta( $post_id, '_wcmf_is_custom', '1' );
 
@@ -378,6 +416,7 @@ class WCMF_Core {
 	 * Step 4: Fix the URL when WordPress retrieves it.
 	 */
 	public function filter_attachment_url( $url, $post_id ) {
+		$post_id = (int) $post_id;
 		if ( ! $post_id ) {
 			return $url;
 		}
@@ -394,6 +433,11 @@ class WCMF_Core {
 		}
 
 		if ( empty( $custom_url ) ) {
+			return $url;
+		}
+
+		$scheme = function_exists( 'wp_parse_url' ) ? wp_parse_url( $custom_url, PHP_URL_SCHEME ) : parse_url( $custom_url, PHP_URL_SCHEME );
+		if ( ! in_array( strtolower( (string) $scheme ), [ 'http', 'https' ], true ) ) {
 			return $url;
 		}
 
@@ -415,6 +459,7 @@ class WCMF_Core {
 	 * Step 5: Fix the File Path when WordPress manipulates the file.
 	 */
 	public function filter_attached_file( $file, $post_id ) {
+		$post_id = (int) $post_id;
 		if ( ! $post_id ) {
 			return $file;
 		}

@@ -3,7 +3,7 @@
  * Plugin Name: WP Conditional Media Folder
  * Plugin URI:  https://github.com/BotheorY/wp-conditional-media-folder
  * Description: Automatically saves uploaded media files to custom server directories based on configurable filename or MIME type rules while ensuring full integration and accessibility within the WordPress Media Library.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Andrea Barbagallo (BotheorY)
  * Author URI:  https://www.andreabarbagallo.com/
  * License:     MIT
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define Constants
-define( 'WCMF_VERSION', '1.0.0' );
+define( 'WCMF_VERSION', '1.0.1' );
 define( 'WCMF_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WCMF_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -43,20 +43,19 @@ spl_autoload_register( function ( $class ) {
 /**
  * Initialize the plugin.
  */
-function wcmf_init() {
-	// Load Text Domain for localization
-	load_plugin_textdomain( 'wp-conditional-media-folder', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
-
-	// Initialize Classes
-	// The objects are instantiated here. Hooks are registered within init().
-	// PHP references to $this inside hooks keep the objects alive.
-	$settings = new \WCMF\WCMF_Settings();
-	$core     = new \WCMF\WCMF_Core();
-
-	$settings->init();
-	$core->init();
+function wcmf_load_textdomain() {
+    load_plugin_textdomain( 'wp-conditional-media-folder', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 }
-add_action( 'plugins_loaded', 'wcmf_init' );
+add_action( 'plugins_loaded', 'wcmf_load_textdomain' );
+
+function wcmf_init() {
+    $settings = new \WCMF\WCMF_Settings();
+    $core     = new \WCMF\WCMF_Core();
+
+    $settings->init();
+    $core->init();
+}
+add_action( 'init', 'wcmf_init' );
 
 /**
  * Activation Hook: Setup default options to avoid empty array issues.

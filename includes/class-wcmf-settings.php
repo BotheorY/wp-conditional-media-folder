@@ -29,12 +29,30 @@ class WCMF_Settings {
 		] );
 
 		register_setting( 'wcmf_options_group', 'wcmf_custom_url', [
-			'sanitize_callback' => 'esc_url_raw'
+			'sanitize_callback' => [ $this, 'sanitize_url_http' ]
 		] );
 
 		register_setting( 'wcmf_options_group', 'wcmf_rules', [
 			'sanitize_callback' => [ $this, 'sanitize_rules' ]
 		] );
+	}
+
+	public function sanitize_url_http( $url ) {
+		$url = (string) $url;
+		$url = esc_url_raw( trim( $url ) );
+		$url = untrailingslashit( $url );
+
+		if ( '' === $url ) {
+			return '';
+		}
+
+		$scheme = function_exists( 'wp_parse_url' ) ? wp_parse_url( $url, PHP_URL_SCHEME ) : parse_url( $url, PHP_URL_SCHEME );
+		if ( ! in_array( strtolower( (string) $scheme ), [ 'http', 'https' ], true ) ) {
+			add_settings_error( 'wcmf_custom_url', 'wcmf_url_scheme', __( 'Invalid URL: only http and https schemes are supported.', 'wp-conditional-media-folder' ) );
+			return get_option( 'wcmf_custom_url' );
+		}
+
+		return $url;
 	}
 
 	private function is_absolute_path( $path ) {
@@ -141,6 +159,44 @@ class WCMF_Settings {
 				);
 				return get_option( 'wcmf_custom_path' );
 			}
+		}
+
+
+		if ( file_exists( $path ) ) {
+			if ( ! is_dir( $path ) ) {
+				add_settings_error(
+					'wcmf_custom_path',
+					'wcmf_path_not_dir',
+					__( 'Invalid path: the specified location exists but is not a directory.', 'wp-conditional-media-folder' )
+				);
+				return get_option( 'wcmf_custom_path' );
+			}
+
+			if ( ! is_writable( $path ) ) {
+				add_settings_error(
+					'wcmf_custom_path',
+					'wcmf_path_not_writable',
+					__( 'Invalid path: directory is not writable by the web server user.', 'wp-conditional-media-folder' )
+				);
+				return get_option( 'wcmf_custom_path' );
+			}
+		} else {
+			// Check if parent is writable if path doesn't exist yet
+			$parent = dirname( $path );
+			if ( file_exists( $parent ) && ! is_writable( $parent ) ) {
+				add_settings_error(
+					'wcmf_custom_path',
+					'wcmf_parent_not_writable',
+					__( 'Invalid path: The directory does not exist, and the parent directory is not writable, so it cannot be created.', 'wp-conditional-media-folder' )
+				);
+				return get_option( 'wcmf_custom_path' );
+			}
+
+			add_settings_error(
+				'wcmf_custom_path',
+				'wcmf_path_missing',
+				__( 'Note: The directory does not currently exist. It will be created automatically during upload if possible.', 'wp-conditional-media-folder' )
+			);
 		}
 
 		return $path;

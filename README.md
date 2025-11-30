@@ -33,4 +33,4 @@ Go to **Settings \> Conditional Media Folder**.
 
 ## **License**
 
-[MIT](https://www.google.com/search?q=LICENSE)
+[MIT](https://opensource.org/licenses/MIT)

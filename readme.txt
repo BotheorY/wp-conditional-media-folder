@@ -3,7 +3,7 @@ Contributors: Andrea Barbagallo (BotheorY)
 Tags: media, upload, custom folder, organization, cdn
 Requires at least: 5.6
 Tested up to: 6.8.3
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 Automatically saves uploaded media files to custom server directories based on configurable filename or MIME type rules while ensuring full integration and accessibility within the WordPress Media Library.
@@ -22,5 +22,7 @@ Caratteristiche:
 4. Insert destination path absolute path and public URL.
 5. Add rules to recognize the files.
 == Changelog ==
+= 1.0.1 =
+* Improved file handling and validation logic
 = 1.0.0 =
 * Initial release.

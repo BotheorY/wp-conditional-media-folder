@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: WP Conditional Media Folder 1.0.0\n"
+"Project-Id-Version: WP Conditional Media Folder 1.0.1\n"
 "Report-Msgid-Bugs-To: \n"
 "Last-Translator: Andrea Barbagallo (BotheorY) info@andreabarbagallo.com\n"
 "Language-Team: info@andreabarbagallo.com\n"
