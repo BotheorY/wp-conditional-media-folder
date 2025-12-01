@@ -219,7 +219,7 @@ class WCMF_Settings {
 
 			$min_len = ( isset( $rule['min_len'] ) && is_numeric( $rule['min_len'] ) ) ? max( 0, intval( $rule['min_len'] ) ) : '';
 			$max_len = ( isset( $rule['max_len'] ) && is_numeric( $rule['max_len'] ) ) ? max( 0, intval( $rule['max_len'] ) ) : '';
-			
+
 			if ( '' !== $min_len ) {
 				$min_len = max( 0, $min_len );
 			}
@@ -239,15 +239,30 @@ class WCMF_Settings {
 				);
 			}
 
+			// New: sanitize and validate MIME type field.
 			$mime_type = isset( $rule['mime_type'] ) ? sanitize_text_field( $rule['mime_type'] ) : '';
 			if ( '' !== $mime_type ) {
 				$mime_type = strtolower( trim( $mime_type ) );
-				// Allow "type/subtype" and "type/" (prefix match), and vendor subtypes.
-				if ( ! preg_match( '#^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]*$#i', $mime_type ) ) {
+
+				// Accept:
+				// 1) "type/subtype" -> exact match
+				// 2) "type/*"       -> wildcard subtype, normalized as "type/"
+				// 3) "type/"        -> prefix match
+				// 4) "type"         -> prefix match, normalized as "type/"
+				if ( preg_match( '/^([a-z0-9!#$&^_.+-]+)\/\*$/i', $mime_type, $m ) ) {
+					// "image/*" => "image/"
+					$mime_type = strtolower( $m[1] ) . '/';
+				} elseif ( preg_match( '/^([a-z0-9!#$&^_.+-]+)$/i', $mime_type, $m ) ) {
+					// "image" => "image/"
+					$mime_type = strtolower( $m[1] ) . '/';
+				} elseif ( preg_match( '/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]*$/i', $mime_type ) ) {
+					// "image/jpeg" or "image/"
+					// Already valid, keep as-is.
+				} else {
 					add_settings_error(
 						'wcmf_rules',
 						'wcmf_rules_mime_invalid',
-						__( 'A rule has an invalid MIME type format. Expected "type/subtype" or "type/".', 'wp-conditional-media-folder' )
+						__( 'A rule has an invalid MIME type format. Expected "type/subtype", "type/*", "type/", or "type".', 'wp-conditional-media-folder' )
 					);
 					$mime_type = '';
 				}
@@ -263,8 +278,16 @@ class WCMF_Settings {
 			];
 
 			// Only save if at least one condition is present.
-			$has_string_condition = ( $starts_with !== '' || $ends_with !== '' || $contains !== '' || $mime_type !== '' );
-			$has_length_condition = ( ( $min_len !== '' && $min_len > 0 ) || ( $max_len !== '' && $max_len > 0 ) );
+			$has_string_condition = (
+				$starts_with !== '' ||
+				$ends_with   !== '' ||
+				$contains    !== '' ||
+				$mime_type   !== ''
+			);
+			$has_length_condition = (
+				( $min_len !== '' && $min_len > 0 ) ||
+				( $max_len !== '' && $max_len > 0 )
+			);
 
 			if ( $has_string_condition || $has_length_condition ) {
 				$sanitized[] = $clean_rule;
@@ -397,10 +420,10 @@ class WCMF_Settings {
 					<label><?php esc_html_e( 'Max Length', 'wp-conditional-media-folder' ); ?></label>
 					<input type="number" name="wcmf_rules[<?php echo esc_attr( $index ); ?>][max_len]" value="<?php echo esc_attr( $max_len ); ?>" min="0" />
 				</div>
-				<div class="wcmf-field">
-					<label><?php esc_html_e( 'MIME Type', 'wp-conditional-media-folder' ); ?></label>
-					<input type="text" name="wcmf_rules[<?php echo esc_attr( $index ); ?>][mime_type]" value="<?php echo esc_attr( $mime ); ?>" placeholder="image/jpeg" />
-				</div>
+                <div class="wcmf-field">
+                    <label><?php esc_html_e( 'MIME Type', 'wp-conditional-media-folder' ); ?></label>
+                    <input type="text" name="wcmf_rules[<?php echo esc_attr( $index ); ?>][mime_type]" value="<?php echo esc_attr( $mime ); ?>" placeholder="image/jpeg or image/*" />
+                </div>
 			</div>
 		</div>
 		<?php

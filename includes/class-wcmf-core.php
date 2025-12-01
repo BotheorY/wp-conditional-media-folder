@@ -35,6 +35,15 @@ class WCMF_Core {
 
 		// 5. Retrieve correct file path for custom files (Server-side operations like thumbnails)
 		add_filter( 'get_attached_file', [ $this, 'filter_attached_file' ], 10, 2 );
+
+		// 6. Intercept image URL resolution for featured images and thumbnails
+		add_filter( 'wp_get_attachment_image_src', [ $this, 'filter_attachment_image_src' ], 10, 4 );
+
+		// 7. Rewrite srcset candidates to point to the custom base URL
+		add_filter( 'wp_calculate_image_srcset', [ $this, 'filter_image_srcset' ], 10, 5 );
+
+		// 8. Fallback: ensure <img> attributes reflect the custom base
+		add_filter( 'wp_get_attachment_image_attributes', [ $this, 'filter_attachment_image_attributes' ], 10, 3 );
 	}
 
 	/**
@@ -277,6 +286,9 @@ class WCMF_Core {
 			if ( empty( $mime_lower ) ) {
 				return false; // Cannot match MIME rule if type is unknown
 			}
+			// Support exact and prefix matches.
+			// Prefix form uses a trailing slash (e.g., "image/"), which
+			// also represents the normalized wildcard submitted as "image/*".
 			$search = $this->wcmf_str_lower( $rule['mime_type'] );
 			if ( '' !== $search ) {
 				$last_char = $this->wcmf_substr( $search, -1 );
@@ -505,6 +517,205 @@ class WCMF_Core {
 		}
 
 		return untrailingslashit( $custom_path ) . '/' . $file_rel_norm;
+	}
+
+	/**
+	 * Intercepts image URL resolution, ensuring featured images and thumbnails
+	 * use the custom folder base URL when the attachment is flagged as custom.
+	 *
+	 * @param array|false $image         Array with URL, width, height, is_intermediate; or false.
+	 * @param int         $attachment_id Attachment ID.
+	 * @param string|array $size         Requested size.
+	 * @param bool        $icon          Whether the image is an icon.
+	 * @return array|false               Adjusted image array or original value.
+	 */
+	public function filter_attachment_image_src( $image, $attachment_id, $size, $icon ) {
+		if ( ! $image || ! is_array( $image ) ) {
+			return $image;
+		}
+
+		$attachment_id = (int) $attachment_id;
+		if ( ! $attachment_id ) {
+			return $image;
+		}
+
+		if ( $icon ) {
+			return $image;
+		}
+
+		$is_custom = get_post_meta( $attachment_id, '_wcmf_is_custom', true );
+		if ( ! $is_custom ) {
+			return $image;
+		}
+
+		$custom_url = (string) get_post_meta( $attachment_id, '_wcmf_root_url', true );
+		if ( '' === $custom_url ) {
+			$custom_url = (string) get_option( 'wcmf_custom_url' );
+		}
+
+		$scheme = function_exists( 'wp_parse_url' ) ? wp_parse_url( $custom_url, PHP_URL_SCHEME ) : parse_url( $custom_url, PHP_URL_SCHEME );
+		if ( empty( $custom_url ) || ! in_array( strtolower( (string) $scheme ), [ 'http', 'https' ], true ) ) {
+			return $image;
+		}
+
+		$base_upload = wp_upload_dir();
+		$default_base = isset( $base_upload['baseurl'] ) ? (string) $base_upload['baseurl'] : '';
+
+		$url = (string) $image[0];
+		if ( '' === $url ) {
+			return $image;
+		}
+
+		$relative = '';
+		if ( '' !== $default_base && 0 === strpos( $url, $default_base ) ) {
+			$relative = ltrim( substr( $url, strlen( $default_base ) ), '/' );
+		} else {
+			$root_url = untrailingslashit( $custom_url );
+			if ( 0 === strpos( $url, $root_url ) ) {
+				$relative = ltrim( substr( $url, strlen( $root_url ) ), '/' );
+			}
+		}
+
+		if ( '' === $relative ) {
+			// As a robust fallback, attempt to build from metadata.
+			$meta = wp_get_attachment_metadata( $attachment_id );
+			if ( is_array( $meta ) && ! empty( $meta['file'] ) ) {
+				$dir = trim( dirname( (string) $meta['file'] ) );
+				$filename = '';
+				if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+					if ( is_string( $size ) && isset( $meta['sizes'][ $size ]['file'] ) ) {
+						$filename = (string) $meta['sizes'][ $size ]['file'];
+					}
+				}
+				if ( '' === $filename ) {
+					$filename = wp_basename( (string) $meta['file'] );
+				}
+				$relative = ( '' !== $dir && '.' !== $dir ) ? untrailingslashit( $dir ) . '/' . $filename : $filename;
+			}
+		}
+
+		$relative = $this->wcmf_normalize_relative( $relative );
+		if ( '' === $relative ) {
+			return $image;
+		}
+
+		$image[0] = untrailingslashit( $custom_url ) . '/' . $relative;
+		return $image;
+	}
+
+	/**
+	 * Rewrites srcset candidates to point to the custom base URL for custom attachments.
+	 *
+	 * @param array       $sources       Srcset candidates keyed by width.
+	 * @param array       $size_array    Requested size array.
+	 * @param string      $image_src     The src of the image.
+	 * @param array       $image_meta    Attachment meta.
+	 * @param int         $attachment_id Attachment ID.
+	 * @return array                      Adjusted sources.
+	 */
+	public function filter_image_srcset( $sources, $size_array, $image_src, $image_meta, $attachment_id ) {
+		$attachment_id = (int) $attachment_id;
+		if ( ! $attachment_id || empty( $sources ) || ! is_array( $sources ) ) {
+			return $sources;
+		}
+
+		$is_custom = get_post_meta( $attachment_id, '_wcmf_is_custom', true );
+		if ( ! $is_custom ) {
+			return $sources;
+		}
+
+		$custom_url = (string) get_post_meta( $attachment_id, '_wcmf_root_url', true );
+		if ( '' === $custom_url ) {
+			$custom_url = (string) get_option( 'wcmf_custom_url' );
+		}
+
+		$scheme = function_exists( 'wp_parse_url' ) ? wp_parse_url( $custom_url, PHP_URL_SCHEME ) : parse_url( $custom_url, PHP_URL_SCHEME );
+		if ( empty( $custom_url ) || ! in_array( strtolower( (string) $scheme ), [ 'http', 'https' ], true ) ) {
+			return $sources;
+		}
+
+		$base_upload = wp_upload_dir();
+		$default_base = isset( $base_upload['baseurl'] ) ? (string) $base_upload['baseurl'] : '';
+		$root_url = untrailingslashit( $custom_url );
+
+		foreach ( $sources as $width => $source ) {
+			if ( empty( $source['url'] ) ) {
+				continue;
+			}
+			$url = (string) $source['url'];
+			$relative = '';
+			if ( '' !== $default_base && 0 === strpos( $url, $default_base ) ) {
+				$relative = ltrim( substr( $url, strlen( $default_base ) ), '/' );
+			} elseif ( 0 === strpos( $url, $root_url ) ) {
+				$relative = ltrim( substr( $url, strlen( $root_url ) ), '/' );
+			}
+			$relative = $this->wcmf_normalize_relative( $relative );
+			if ( '' !== $relative ) {
+				$sources[ $width ]['url'] = $root_url . '/' . $relative;
+			}
+		}
+
+		return $sources;
+	}
+
+	/**
+	 * Ensures <img> attributes (src, srcset) reflect the custom base URL
+	 * for custom attachments, providing a safety net if prior filters missed.
+	 *
+	 * @param array $attr            Attributes array.
+	 * @param WP_Post $attachment    Attachment object.
+	 * @param string|array $size     Requested size.
+	 * @return array                 Adjusted attributes.
+	 */
+	public function filter_attachment_image_attributes( $attr, $attachment, $size ) {
+		$attachment_id = is_object( $attachment ) ? (int) $attachment->ID : (int) $attachment;
+		if ( ! $attachment_id ) {
+			return $attr;
+		}
+
+		$is_custom = get_post_meta( $attachment_id, '_wcmf_is_custom', true );
+		if ( ! $is_custom ) {
+			return $attr;
+		}
+
+		$custom_url = (string) get_post_meta( $attachment_id, '_wcmf_root_url', true );
+		if ( '' === $custom_url ) {
+			$custom_url = (string) get_option( 'wcmf_custom_url' );
+		}
+		$scheme = function_exists( 'wp_parse_url' ) ? wp_parse_url( $custom_url, PHP_URL_SCHEME ) : parse_url( $custom_url, PHP_URL_SCHEME );
+		if ( empty( $custom_url ) || ! in_array( strtolower( (string) $scheme ), [ 'http', 'https' ], true ) ) {
+			return $attr;
+		}
+
+		$base_upload = wp_upload_dir();
+		$default_base = isset( $base_upload['baseurl'] ) ? (string) $base_upload['baseurl'] : '';
+		$root_url = untrailingslashit( $custom_url );
+
+		if ( ! empty( $attr['src'] ) && is_string( $attr['src'] ) ) {
+			$src = $attr['src'];
+			if ( '' !== $default_base && 0 === strpos( $src, $default_base ) ) {
+				$relative = $this->wcmf_normalize_relative( ltrim( substr( $src, strlen( $default_base ) ), '/' ) );
+				if ( '' !== $relative ) {
+					$attr['src'] = $root_url . '/' . $relative;
+				}
+			}
+		}
+
+		if ( ! empty( $attr['srcset'] ) && is_string( $attr['srcset'] ) ) {
+			$attr['srcset'] = preg_replace_callback( '#\s?(https?://[^\s,]+)#', function( $m ) use ( $default_base, $root_url ) {
+				$url = (string) $m[1];
+				if ( '' !== $default_base && 0 === strpos( $url, $default_base ) ) {
+					$relative = ltrim( substr( $url, strlen( $default_base ) ), '/' );
+					$relative = $this->wcmf_normalize_relative( $relative );
+					if ( '' !== $relative ) {
+						return ' ' . ( $root_url . '/' . $relative );
+					}
+				}
+				return $m[0];
+			}, (string) $attr['srcset'] );
+		}
+
+		return $attr;
 	}
 	
 }

@@ -24,5 +24,6 @@ Caratteristiche:
 == Changelog ==
 = 1.0.1 =
 * Improved file handling and validation logic
+* Bugs fixed
 = 1.0.0 =
 * Initial release.
